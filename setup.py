@@ -5,10 +5,10 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="PyOCT", # Replace with your own username
-    version="2.0.8",
+    version="3.0.0",
     author="Yuechuan Lin",
     author_email="linyuechuan1989@gmail.com",
-    description="OCT imaging reconstruction on spectral-domain optical coherence tomography",
+    description="Optical imaging reconstruction for both spectral-domain OCT and off-axis digital holography microscopy",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NeversayEverLin/PyOCT",

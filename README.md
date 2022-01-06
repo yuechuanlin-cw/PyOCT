@@ -1,4 +1,4 @@
-# PyOCT: Imaging Reconstruction for Spectral-Domain Optical Coherence Tomography
+# Optical imaging reconstruction for both spectral-domain OCT and off-axis digital holography microscopy
 PyOCT is developed to conduct normal spectral-domain optical coherence tomography (SD-OCT) imaging reconstruction with main steps as:
 1. Reading Data
 2. Background Subtraction 
@@ -8,7 +8,9 @@ PyOCT is developed to conduct normal spectral-domain optical coherence tomograph
 5. Inverse Fourier Transform 
 6. Obtain OCT Image
 
-The algorithms was developed initially in Prof. Steven G. Adie research lab at Cornell University using MATLAB. The reconstruction speed has been improved with matrix-operation. Compared with MATLAB, Python language have a much better performance in loading data from binary files tested only in our lab computer. Currently, PyOCT only supports python 3.0+. 
+For off-axis digital holography microscopy (DHM) reconstruction, importing HoloLib from PyOCT and using class of QPImage(). 
+
+PyOCT only supports python 3.0+. 
 
 ## Quick start
 PyOCT can be install using pip:
@@ -75,6 +77,45 @@ Class OCTImagingProcessing also provides several accesses/members to imaging pro
 * *self.DepthProfile*: depth profile (along z-axis) of reconstructed image
 * *self.ShowXZ(OCTData)*: member function to show cross-section. 
 
+DHM image reconstruction:
+This class implements various tasks for quantitative phase imaging, including phase unwrapping, background correction,numerical focusing, and data export.
+Parameters:
+* *data*: 2d ndarray (float or complex) or list, The experimental data (see which_data). If data is a file .mat or .h5 or .hdf5, it will automatically load data where the keyword is given by data_key or automatically search for "IMG" or "data". 
+* *data_key*: the key for accessing data array if "data" is defined as a file format; Default is None, then it will iterates automaticaly through the data file and get the first keys of either "data" or "IMG" 
+* *ref_data*: reference image. could be (X,Y) or (T,X,Y) 
+* *meta_data*: dict, Meta data associated with the input data.
+* *holo_kw*: dict,Special keyword arguments for phase retrieval from hologram data.default: {"batchSize":50,"cr":0.5,"trans":False onlyCPU":False, "verbose":verbose,"zero_pad":True,subtract_mean":True, "returnContrastMat":True} 
+    batchSize: the batch size to divide raw data into small batches in case overflowing memory. If overmemory happens, reduce the batchSize.
+    cr: proportion of image to be counted when calculating interference contrast. 
+    trans: transpose the raw data. usually to make it identical dimension to MATLAB
+    onlyCPU: only using CPU. If False, it will choose GPU computation resource. 
+    verbose: show intermediate results. better to set as False when dealing with large amount of data
+    zero_pad:True,do zero padding 
+    subtract_mean:True, subtract mean of rawdata before recontruction.
+    returnContrastMat:True, get the contrast results also. 
+    bg_kw: dict, keyword for estimatign background title. here right now, default: {"fit_offset":"mean", "fit_profile":"tilt","border_px":6}
+    computeBg: bool, default as True. whether or not to compute background tilt, using parameters from bg_kw. 
+* *proc_phase*: bool, Process the phase data. This includes phase unwrapping. using :func:`skimage.restoration.unwrap_phase` and correcting for 2PI phase offsets (The offset is estimated from a 1px-wide border around the image  
+* *slices*: int, default -1, indicating it will process all the frames. Otherwise, it will only process 0:slices frames. 
+        
+* *Members and attributes*:
+        .data: recontructed complex data. This is actually the phase is not processed. 
+        .field: recontructed complex data where the phase is unwrapped and background is corrected (if computeBg=True)
+        .amp: get amplitude 
+        .pha: get processed phase data. 
+        .bg: get computed and fitted background fitted data. 
+        .ref: processed reference image. 
+        .info: get meta data. 
+        .save: save data into file (.mat, .hdf5 or .h5) 
+        .contrast_mat: contrast map versus z axis. 
+        .out_int: intensity map versus z axis. 
+        .zpos: z-axis positions for each frame, if available. 
+
+        typical use:
+        qpi = QPImage(file_name) 
+        qpi.save(...)  
+
+        
 Example dataset could be download under the request to email address: linyuechuan1989@gmail.com 
 ## License
 PyOCT is licensed under the terms of the MIT License (see the file LICENSE).# PyOCT

@@ -48,7 +48,7 @@ def QuadraticFit2d(inData,Settings, verbose=False):
         X,Y = np.meshgrid(x,y,copy=False) 
         X = X.flatten()
         Y = Y.flatten()
-        A = np.array([X*0+1, X, Y, X**2, X**2*Y, X**2*Y**2, Y**2, X*Y**2, X*Y]).T
+        A = np.array([X*0+1, X, Y, X**2, X**2*Y, X**2*Y**2, Y**2, X*Y**2, X*Y]).T #np.array([X*0+1, X, Y, X**2,  Y**2, X*Y]).T 
         B = surfData.flatten()
         coeff, r, rank, _ = np.linalg.lstsq(A, B,rcond=-1) # rcond = -1, using machine precision as to define zeros. rcond = None means that values smaller than machine precision * Max of A will be considered as zeros. 
         if verbose:
@@ -56,7 +56,7 @@ def QuadraticFit2d(inData,Settings, verbose=False):
                 print("coeff0: {}".format(coeff[0]))
                 print("r : {}".format(r))
                 print("rank: {}".format(rank))
-        zxy = coeff[1]*X+coeff[2]*Y+coeff[3]*X**2 + coeff[4]*X**2*Y+coeff[5]*X**2*Y**2+coeff[6]*Y**2+coeff[7]*X*Y**2+coeff[8]*X*Y
+        zxy = coeff[1]*X+coeff[2]*Y+coeff[3]*X**2 + coeff[4]*X**2*Y+coeff[5]*X**2*Y**2+coeff[6]*Y**2+coeff[7]*X*Y**2+coeff[8]*X*Y #coeff[1]*X+coeff[2]*Y+coeff[3]*(X**2) + coeff[4]*(Y**2)+coeff[5]*X*Y 
         zxy = np.reshape(zxy,(sizeX,sizeY))
 
         return coeff[0], zxy  
@@ -409,7 +409,7 @@ def FullCAO(inData,Settings,verbose=False,proctype='oct',start_index=5,end_index
         inData, Settings = CoherenceGateRemove(inData,Settings,verbose=verbose,proctype=proctype,start_index = start_index, end_index = end_index)
         inData, Settings = FocalPlaneRegistration(inData,Settings,proctype=proctype)
         inData, Settings = PhaseRegistration(inData,Settings)
-        inData, Settings = BulkDemodulation(inData,Settings,showFitResults=verbose,excludeGlass=excludeGlass) 
+        inData, Settings = BulkDemodulation(inData,Settings,showFitResults=verbose) 
         inData, Settings = ViolentDefocus(inData,Settings,showFitResults=verbose,proctype=proctype,start_bias = start_bias, extend_num_pixels = extend_num_pixels)
         if singlePrecision:
                 inData = np.abs(inData)

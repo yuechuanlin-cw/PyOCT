@@ -3,11 +3,14 @@ from h5py._hl.files import File
 import numpy as np 
 import xml.etree.ElementTree as ET
 import time
+from numpy.lib.utils import info
+from numpy.ma.core import divide
 from scipy.linalg import dft
 import numpy.matlib 
 import matplotlib.pyplot as plt 
 import matplotlib 
 from PyOCT import CAO 
+from matplotlib.widgets import Slider
 import re 
 import h5py
 from scipy.linalg.misc import norm 
@@ -20,6 +23,19 @@ import scipy.stats
 import matplotlib.colors
 from matplotlib import cm 
 import math 
+from scipy.optimize import curve_fit 
+from lmfit import Model 
+import scipy.io 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import copy 
+from cellpose import models
+import skimage.filters
+"""
+1) imshow() will tranpose the array. That's the x-axis in imshow() corresponds to y-axis in numpy-array. 
+
+"""
+
+
 def find_all_dataset(root_dir,saveFolder, saveOption='in'):
     """
     Looking for all datasets under root_dir and create a saveFolder under root_dir for data save. 
@@ -120,7 +136,7 @@ def SaveData(save_path,FileName,inData,datatype='data',varName = 'OCTData'):
         raise ValueError("Wrong data type!")    
 def LoadSettings(path,FileName):
     """
-    Loading Settings file. 
+    Loading Settings file. six
     path should NOT end with "/" or "\\".
     """
     Settings = dict.fromkeys([], []) 
@@ -185,8 +201,12 @@ def normxcorr2(template, image, mode="full"):
     
     return out
 
-def Max2d(inData):
-    return np.amax(inData), np.unravel_index(inData.argmax(),inData.shape) 
+def Max2d(inData,nanVersion=False):
+    #return maximum and also index (y,x) of 2D array 
+    if nanVersion:
+        return np.nanmax(inData), np.asarray(np.unravel_index(np.nanargmax(inData),inData.shape),dtype=int)
+    else:
+        return np.amax(inData), np.asarray(np.unravel_index(inData.argmax(),inData.shape),dtype=int) 
 
 def patternMatch(template,rootImage,cropIndex = None, showFit = False):
     """Compare template image to rootImage and find the translation index required 
@@ -320,7 +340,7 @@ def fillhole(input_image):
     img_out = input_image | im_flood_fill_inv
     return img_out 
 
-def WriteIntoGif(path,fps,endsWith = '.png',saveFileName=None):
+def WriteIntoGif(path,fps,endsWith = '.png',saveFileName=None,inFormat="mp4"):
     import imageio 
     from progress.bar import Bar
     if path.endswith("/") or path.endswith("\\"):
@@ -337,14 +357,21 @@ def WriteIntoGif(path,fps,endsWith = '.png',saveFileName=None):
     bar2 = Bar(' Writing into GIF', max=len(pngFiles))
     images = []
 
-    for filename in pngFiles:
-        bar2.next() 
-        images.append(imageio.imread(path+'/'+filename))
-    if saveFileName:
-        savename = saveFileName+".gif"
-    else:
-        savename = "animation.gif"
-    imageio.mimsave(path+"/"+savename, images,fps=fps)
+    if inFormat == "gif":
+        for filename in pngFiles:
+            bar2.next() 
+            images.append(imageio.imread(path+'/'+filename))
+        if saveFileName:
+            savename = saveFileName+".gif"
+        else:
+            savename = "animation.gif"
+        imageio.mimsave(path+"/"+savename, images,fps=fps)
+    elif inFormat == "mp4":
+        writer = imageio.get_writer(path+"/"+"animation.mp4", fps=fps)
+        for filename in pngFiles:
+            bar2.next() 
+            writer.append_data(imageio.imread(path+'/'+filename))
+        writer.close()
 
 
 def patternMatch_fft(plane_xy_shift,plane_xy,showFit = False):
@@ -353,8 +380,8 @@ def patternMatch_fft(plane_xy_shift,plane_xy,showFit = False):
     here plane_xy_shift and plane_xy must has the same dimension. 
     """ 
     sx, sy = np.shape(plane_xy)
-    fft_xy = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(plane_xy)))
-    fft_xy_shift = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(plane_xy_shift)))
+    fft_xy = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(plane_xy),s=[sx,sy]))
+    fft_xy_shift = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(plane_xy_shift),s=[sx,sy]))
     cross_xy = np.abs(np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(fft_xy * np.conjugate(fft_xy_shift)))))
     max_corr_r, posxy = Max2d(cross_xy)
     shiftx, shifty = np.asarray(posxy)-[int(sx/2),int(sy/2)]
@@ -466,7 +493,9 @@ def ListTXT(FileName,mode='w',data=None):
     return output
 
 
-def mean_confidence_interval(data, confidence=0.95):
+def mean_confidence_interval(data, confidence=0.95,inputType="n"):
+    if inputType == "d":
+        data = data.to_numpy()
     a = data.flatten() #1.0 * np.array(data)
     n = len(a)
     m, se = np.mean(a), scipy.stats.sem(a)
@@ -499,3 +528,434 @@ def get_prime_factors(number):
     if number > 2:
         prime_factors.append(int(number))
     return prime_factors
+
+
+
+def colorV(cat="raw"):
+    #blue red
+    if cat =="raw":
+        return ["#019BD8", "#D81C28","#FF7F0E","#2CA02C","#e377c2"]
+    elif cat == "three": #red, blue, gray 
+        return ["#35739C","#DE3122","#BDBEC0"]
+    elif cat == "three2": #blue, green, gray 
+        return ["#C1C2E2","#8CB78D","#525252"]
+    elif cat == "six":
+        return ["#DF1D27","#F37E1F","#367DB7","#F6EB36","#4AAD4A","#A55528"]
+    elif cat == "six2":
+        return ["#E63946","#A8DADC","#F1FAEE","#457B9D","#8D99AE","#1D3557"]
+    elif cat == "viz":
+        return ["#fc4e51","#1dabe6","#1c366a","#c3ced0","#e43034","#af060f"]
+
+
+def create_fig(figsize=[3,2],nrows=1,ncols=1,left=0.12, bottom=0.12, right=0.95, top=0.95,sharex=False,sharey=False,wspace=0.2,hspace=0.2):
+    fig, ax = plt.subplots(nrows=nrows,ncols=ncols,sharex=sharex,sharey=sharey) 
+    fig.set_size_inches(figsize[0],figsize[1])
+    fig.subplots_adjust(left=left, bottom=bottom, right=right, top=top,wspace=wspace,hspace=hspace)
+    #fontsize=6,borderpad=0.2,labelspacing=0.2,handlelength=1.0,handletextpad=0.4,borderaxespad=0.2,columnspacing=1.0)
+    return fig, ax 
+
+def adjacent_values(vals, q1, q3):
+    upper_adjacent_value = q3 + (q3 - q1) * 1.5
+    upper_adjacent_value = np.clip(upper_adjacent_value, q3, vals[-1])
+
+    lower_adjacent_value = q1 - (q3 - q1) * 1.5
+    lower_adjacent_value = np.clip(lower_adjacent_value, vals[0], q1)
+    return lower_adjacent_value, upper_adjacent_value
+
+def Quartiles_Whiskers(vals):
+    quartile1, medians, quartile3 = np.percentile(vals,[25,50,75]) 
+    medians = np.mean(vals) 
+    whiskers = adjacent_values(vals,quartile1,quartile3) 
+    return quartile1,medians,quartile3,whiskers
+
+def Gauss(x, amp, cen, wid, bis):
+    #return bis  + amp/(np.sqrt(2*np.pi)) * np.exp(-(x-cen)**2/(2*wid**2))
+    return bis + amp*np.exp(-2*(x-cen)**2/(wid**2))
+
+def gauss_fwhm(x,y):
+    cont_bi = np.sqrt(2*np.log(2))
+    xsize = np.size(x) 
+    amp = np.amax(y) 
+    cen = x[np.argmax(y)]
+    
+   # halVal = (np.amax(y) - np.amin(y))/2 
+   # indx = x[y>halVal] 
+   # wid = (x[np.argmax(indx)] - x[np.argmin(indx)])/cont_bi
+    mean = sum(x * y) / sum(y)
+    wid = np.sqrt(sum(y * (x - mean) ** 2) / sum(y))
+    #print("Estimate FWHM is {}".format(wid))
+    popt, pcov = curve_fit(Gauss,x,y,p0=[amp,cen,wid,np.amin(y)])
+    fwhm = cont_bi * popt[2]
+    #print(popt) 
+    fitx = np.linspace(np.amin(x),np.amax(x),num=np.size(x)*2)
+    fity =Gauss(fitx,*popt)
+    return fwhm, fitx,fity, popt  #, x[np.argmin(indx)],x[np.argmax(indx)]
+
+
+
+def fwhm(x,y):
+    """
+    Calculating of FWHM based on directly searching for 0.5Max. 
+    FWHM of the waveform y(x) and its polarity. 
+    Adapt from Patrick Egan, Rev 1.2 April 2006. 
+    Which was originally developed in Matlab. 
+    """
+    x = np.squeeze(x)
+    y = np.squeeze(y)
+    y = y/np.amax(y) 
+    N = np.size(y) 
+    lev50 = 0.5 
+    if y[0] < lev50:
+        centerIndex = np.argmax(y) 
+       # Pol = 1 
+    else:
+        centerIndex = np.argmin(y) 
+       # Pol = -1 
+    indx1 = 1 
+    while np.sign(y[indx1]-lev50) == np.sign(y[indx1-1]-lev50):
+        indx1 = indx1 + 1 
+    
+    interp = (lev50 - y[indx1-1])/(y[indx1]-y[indx1-1])
+    tlead = x[indx1-1] + interp * (x[indx1]-x[indx1-1]) 
+    indx2 = centerIndex + 1 
+    while (np.sign(y[indx2]-lev50) == np.sign(y[indx2-1]-lev50)) and (indx2 < N-1):
+        indx2 = indx2 + 1 
+    if indx2 != N-1:
+        #Ptype = 1 
+        interp = (lev50-y[indx2-1]) / (y[indx2]-y[indx2-1]) 
+        ttrail = x[indx2-1] + interp * (x[indx2]-x[indx2-1]) 
+        width = ttrail - tlead 
+    else:
+        #Ptype = 2
+        ttrail = np.nan 
+        width = np.nan 
+
+
+    return width 
+
+def gauss_fwhm2(x,y):
+    cont_bi = np.sqrt(2*np.log(2))
+    xsize = np.size(x) 
+    amp = np.amax(y) 
+    cen = x[np.argmax(y)]
+    
+    #mean = sum(x * y) / sum(y)
+    wid = fwhm(x,y) #np.sqrt(sum(y * (x - mean) ** 2) / sum(y))
+
+    gmodel = Model(Gauss) 
+    print('parameter names: {}'.format(gmodel.param_names))
+    print('independent variables: {}'.format(gmodel.independent_vars))
+    params = gmodel.make_params(amp=amp,cen=cen,wid=wid,bis=np.amin(y)) 
+    results = gmodel.fit(y,params,x=x)
+    print(results.fit_report()) 
+
+    
+    fitx = np.linspace(np.amin(x)*1.1,np.amax(x)*1.1,num=np.size(x)*2) 
+    fity = gmodel.eval(params=results.params,x=fitx) 
+    dely = results.eval_uncertainty(sigma=3,x=fitx) #3sigma uncertainity 
+    
+    fwhm0 = results.params["wid"]*cont_bi
+    return fwhm0,fitx,fity,results,dely  
+
+def show3DStack(image_3d, axis = 0, cmap = "gray",  extent = (0, 1, 0, 1),trans = False, addPatch=False,NewPatch=None,figTitle="Img",excludeNaN=True,**kwargs):
+    if axis == 0:
+        image  = lambda index: image_3d[index, :, :]
+    elif axis == 1:
+        image  = lambda index: image_3d[:, index, :]
+    else:
+        image  = lambda index: image_3d[:, :, index]
+    
+    if excludeNaN:
+        cmap = copy.copy(plt.get_cmap(cmap))
+        cmap.set_bad("black",1.0)
+    current_idx= 0
+    figT, ax      = plt.subplots(1, 1, figsize=(6.5, 5))
+    figT.suptitle(figTitle)
+    plt.subplots_adjust(left=0.15, bottom=0.15)
+    if "clim" in kwargs.keys():
+        clim = kwargs["clim"]
+    #(np.nanmin(np.abs(image_3d)), np.nanmax(np.abs(image_3d)))
+        if trans:
+            fig = ax.imshow(np.transpose(image(current_idx)), cmap = cmap,  clim = clim, extent = extent)
+        else:
+            fig = ax.imshow(image(current_idx), cmap = cmap,  clim = clim, extent = extent)
+    else:
+        if trans:
+            fig = ax.imshow(np.transpose(image(current_idx)), cmap = cmap,  clim = (np.nanmin(image(current_idx)), np.nanmax(image(current_idx))), extent = extent)
+        else:
+            fig = ax.imshow(image(current_idx), cmap = cmap,  clim = (np.nanmin(image(current_idx)), np.nanmax(image(current_idx))), extent = extent)
+    ax.set_title("layer: " + str(current_idx))
+    plt.colorbar(fig, ax=ax)
+    plt.axis('off')
+    ax_slider  = plt.axes([0.15, 0.1, 0.65, 0.03])
+    slider_obj = Slider(ax_slider, "layer", 0, image_3d.shape[axis]-1, valinit=current_idx, valfmt='%d',color="green")
+    def update_image(index):
+        global current_idx
+        index       = int(index)
+        current_idx = index
+        ax.set_title("layer: " + str(index))
+        if trans:
+            fig.set_data(np.transpose(image(index)))            
+        else:
+            fig.set_data(image(index))
+        if "clim" not in kwargs.keys():
+            fig.set_clim((np.nanmin(image(index)), np.nanmax(image(index))))
+        if addPatch:
+            ax.add_patch(NewPatch)
+    def arrow_key(event):
+        global current_idx
+        if event.key == "left":
+            if current_idx-1 >=0:
+                current_idx -= 1
+        elif event.key == "right":
+            if current_idx+1 < image_3d.shape[axis]:
+                current_idx += 1
+        slider_obj.set_val(current_idx)
+    slider_obj.on_changed(update_image)
+    plt.gcf().canvas.mpl_connect("key_release_event", arrow_key)
+    #plt.show()
+    return ax 
+
+
+
+def freedman_diaconis(data, returnas="width"):
+    """
+    Use Freedman Diaconis rule to compute optimal histogram bin width. 
+    ``returnas`` can be one of "width" or "bins", indicating whether
+    the bin width or number of bins should be returned respectively. 
+
+
+    Parameters
+    ----------
+    data: np.ndarray
+        One-dimensional array.
+
+    returnas: {"width", "bins"}
+        If "width", return the estimated width for each histogram bin. 
+        If "bins", return the number of bins suggested by rule.
+    """
+    data = np.asarray(data, dtype=np.float_)
+    IQR  = scipy.stats.iqr(data, rng=(25, 75), scale="raw", nan_policy="omit")
+    N    = data.size
+    bw   = (2 * IQR) / np.power(N, 1/3)
+
+    if returnas=="width":
+        result = bw
+    else:
+        datmin, datmax = data.min(), data.max()
+        datrng = datmax - datmin
+        result = int((datrng / bw) + 1)
+    return result
+
+def ReadMat(fileName,keyWord=None):
+    output = File(fileName,"r")
+    if keyWord == None:
+        res = output["data"] 
+        output.close()
+    else:
+        res = np.asarray(output["data"][keyWord])
+        print("Member in dataset include: ")
+        print(output["data"].keys()) 
+        output.close()
+    return res 
+
+def makeGaussian2D(size, fwhm = 3, center=None):
+    """ Make a square gaussian kernel.
+    size is the length of a side of the square
+    fwhm is full-width-half-maximum, which
+    can be thought of as an effective radius.
+        w(1/e2 radius) = fwhm/(2 sqrt(log2))
+    """
+    x = np.arange(0, size, 1, float)
+    y = x[:,np.newaxis]
+
+    if center is None:
+        x0 = y0 = size // 2
+    else:
+        x0 = center[0]
+        y0 = center[1]
+
+    return np.exp(-4*np.log(2) * ((x-x0)**2 + (y-y0)**2) / fwhm**2)
+
+def LoadMat(filePath,verbose=True,**kwargs):
+    """
+    Not working as expected 
+    """
+    try:
+        dataFile = h5py.File(filePath,"r")
+        if verbose:
+            print("keys are: {}".format(dataFile["data"].keys())) 
+        if "keys" in kwargs:
+            return dataFile["data"][eval(keys)]
+        else:
+            return dataFile
+    except:
+        data = scipy.io.loadmat(filePath)
+        if verbose:
+            print(data.keys())
+        if "keys" in kwargs:
+            return data["data"][eval(keys)] 
+        else:
+            return data
+
+def add_colorbar(ax,im,position="right",size="4%",pad=0.05,label="",label_fontsize=8):
+    divider = make_axes_locatable(ax) 
+    cax = divider.append_axes(position, size=size, pad=pad)
+    cb=plt.colorbar(im,cax=cax)
+    cb.ax.tick_params(labelsize=label_fontsize) 
+    if len(label) != 0:
+        cb.set_label(label,fontsize=label_fontsize)
+    return cb 
+
+def quandraticFit2d(input,verbose=False): 
+    img = skimage.filters.gaussian(input,sigma=20)
+    sizeX,sizeY = np.shape(img) 
+    x = np.arange(0,sizeX,step=1,dtype=int) 
+    y = np.arange(0,sizeY,step=1,dtype=int) 
+    X, Y = np.meshgrid(x,y,copy=False) 
+    X = X.flatten()
+    Y = Y.flatten() 
+    A =  np.array([X*0+1, X, Y, X**2,  Y**2, X*Y]).T  #np.array([X*0+1, X, Y, X**2, X**2*Y, X**2*Y**2, Y**2, X*Y**2, X*Y]).T ##
+    B = img.flatten()
+    coeff, r, rank, _ = np.linalg.lstsq(A, B,rcond=-1)    
+    zxy = coeff[1]*X+coeff[2]*Y+coeff[3]*(X**2) + coeff[4]*(Y**2)+coeff[5]*X*Y # coeff[1]*X+coeff[2]*Y+coeff[3]*X**2 + coeff[4]*X**2*Y+coeff[5]*X**2*Y**2+coeff[6]*Y**2+coeff[7]*X*Y**2+coeff[8]*X*Y #
+    zxy = np.reshape(zxy,(sizeX,sizeY)) + coeff[0]
+
+    if verbose: 
+        figQ, axQ = create_fig()
+        figQ.suptitle("fitted 2D bkgnd")
+        axQ.imshow(zxy) 
+        axQ.set_axis_off() 
+
+        figQ2, axQ2 = create_fig(figsize=[7,6],ncols=2) 
+        figQ2.suptitle("Image b/a bkgnd subtraction")
+        axQ2[0].imshow(input) 
+        axQ2[1].imshow(input-zxy) 
+        axQ2[0].set_axis_off()
+        axQ2[1].set_axis_off() 
+
+    return zxy
+
+def cellSeg(img,blur=True,verbose=False):
+    if blur:
+        img = skimage.filters.gaussian(img,sigma=5)
+    img = np.asarray((img - np.amin(img))/(np.amax(img)-np.amin(img)) * 255,dtype=np.uint16) 
+    #https://nbviewer.org/github/MouseLand/cellpose/blob/master/notebooks/run_cellpose.ipynb
+    model = models.Cellpose(gpu=False,model_type="cyto")
+    channels = [0,0] 
+    masks, flows, styles, diams = model.eval(img, diameter=60, channels=channels,mask_threshold=np.amin(img))
+    if verbose:
+        fig, ax = create_fig(figsize=[6,5],nrows=1,ncols=2)
+        ax[0].imshow(masks)
+        ax[1].imshow(masks*img,cmap="jet")  
+    return masks
+
+def zeroPad2d(data, zero_pad=True):
+    """Zero padd data 
+
+    This is useful for padding zero in spatial domain where zeros are padded to XxY image without centering the image.
+    Usually conducted before fft(fftshif(data))
+
+    Parameters
+    ----------
+    data: 2d fload ndarray
+        real-valued image data
+    zero_pad: bool
+        perform zero-padding to next order of 2
+    """
+    if zero_pad:
+        # zero padding size is next order of 2
+        (N, M) = data.shape
+        order = int(max(64., 2**np.ceil(np.log(2 * max(N, M)) / np.log(2))))
+
+        # this is faster than np.pad    
+        datapad = np.zeros((order, order), dtype=data.dtype)               
+        datapad[:data.shape[0], :data.shape[1]] = data
+    else:
+        datapad = data
+
+    return datapad 
+
+"""
+inc_patch = mpatches.Patch(color=colors[0], label='C1')
+rt_patch = mpatches.Patch(color=colors[1], label='C2')
+lu_patch = mpatches.Patch(color=colors[2], label='C3')
+ax1[0].legend(handles=[inc_patch, rt_patch,lu_patch],fontsize=8,borderpad=0.2,labelspacing=0.3,handlelength=1.0,handleheight=0.5,handletextpad=0.4,borderaxespad=0.2,columnspacing=1.0)
+
+"""
+
+
+"""
+def MotionCorrection(img,preProcess=False,pw_rigid=True,**kwargs):
+    #
+    #Conducting motiong correction over 3D time-lapse data. 
+    #Input:
+    #    img: should be TxXxY data dim as real number 
+    #Output:
+    #    img_correct: motion corrected data. 
+    
+    import caiman 
+    print("Doing motion correction...")
+    timeM1 = time.time()
+    T, X, Y = np.shape(img)
+    
+    if preProcess:
+        out = img.copy() 
+        #do median filter 
+        for i in range(T):
+            out[i,:,:] = ndimage.median_filter(out[i,:,:],size=5) 
+    else:
+        out = img.copy()
+
+    if "refFrame" in kwargs.keys():
+        refFrame = kwargs["refFrame"]
+    else:
+        refFrame = int(T/2) #using the central frame as reference frame 
+
+    #check the complete list of parameters at: 
+    # https://github.com/flatironinstitute/CaImAn/blob/master/caiman/motion_correction.py
+    max_shifts = (20, 20)  # maximum allowed rigid shift in pixels (view the movie to get a sense of motion)
+    strides =  (48, 48)  # create a new patch every x pixels for pw-rigid correction
+    overlaps = (32, 32)  # overlap between pathes (size of patch strides+overlaps)
+    num_frames_split = int(T/20)  # length in frames of each chunk of the movie (to be processed in parallel)
+    if num_frames_split < 1:
+        num_frames_split = 2 
+    max_deviation_rigid = 10   # maximum deviation allowed for patch with respect to rigid shifts
+    pw_rigid = pw_rigid  # flag for performing rigid or piecewise rigid motion correction
+    shifts_opencv = True  # flag for correcting motion using bicubic interpolation (otherwise FFT interpolation is used)
+    border_nan = 'copy'  # replicate values along the boundary (if True, fill in with NaN)
+    
+
+    mc = cam.motion_correction.MotionCorrect(out, max_shifts=max_shifts,num_frames_split = num_frames_split,
+                  strides=strides, overlaps=overlaps,pw_rigid = pw_rigid,use_cuda=True,
+                  max_deviation_rigid=max_deviation_rigid, 
+                  shifts_opencv=shifts_opencv, nonneg_movie=True,
+                  border_nan=border_nan)
+    mc.motion_correct(template=out[refFrame,:,:],save_movie=True)
+    if pw_rigid:
+        m_els = cam.load(mc.fname_tot_els) 
+    else:
+        m_els = cam.load(mc.mmap_file)
+    timeM2 = time.time()
+    print("Motion correction take {}min".format((timeM2-timeM1)/60)) 
+    return m_els
+"""
+
+
+#way to add scale bar 
+# axSingle[0].add_patch(Rectangle((2,int(singRange_y[1]-singRange_y[0]-4)),width=scaleBar/pixelSize,height=2,edgecolor=None,facecolor="w",fill=True))
+        #axSingle[0].text(7,int(singRange_y[1]-singRange_y[0]-6),str(scaleBar) + r"$\mu$m",color="w",fontsize=8) 
+
+
+"""
+# set font of plot 
+matplotlib.rcParams['font.family'] = 'sans-serif'
+matplotlib.rcParams['font.sans-serif'] = ['Helvetica']
+font = {'weight': 'normal',
+        'size'   : 8}
+matplotlib.rc('font', **font)
+matplotlib.rc('text', usetex=False)
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rcParams['mathtext.default'] = 'regular'
+"""
