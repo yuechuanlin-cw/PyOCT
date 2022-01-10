@@ -113,7 +113,7 @@ def HT2D(imgRaw,verbose=False,returnSimple=False,subtract_mean=True,zero_pad=Tru
     Input:
     img: 2D ndarray. 
 
-    *args: arguments 
+    **kwargs: arguments 
         mi, mj: the (x,y) location of interference signal in frequency domain. 
         cmask: the mask to mask out the central signal in frequency domain. 
     """
@@ -150,29 +150,42 @@ def HT2D(imgRaw,verbose=False,returnSimple=False,subtract_mean=True,zero_pad=Tru
         cmask = signal.convolve(gauss, disk, mode="same")
         cmask /= cmask.max()
 
-        
     dCF = Fimg * cmask #DC component 
+    if verbose:
+        fig, ax = misc.create_fig(figsize=[5,4],nrows=2,ncols=2)
+        ax[1,0].imshow(np.log10(np.abs(dCF)+1e-6),cmap="gray")
+        ax[1,0].set_title("dc with mask") 
+        ax[1,0].set_axis_off() 
+        ax[1,1].imshow(np.log10(np.abs(Fimg)+1e-6),cmap="gray")
+        ax[1,1].scatter(int(mj+Fimg.shape[1]/2),int(mi+Fimg.shape[0]/2),s=20,alpha=0.5,color="red")
+        ax[1,1].set_title("Fimg before mask") 
+        ax[1,1].set_axis_off()
     Fimg = np.roll(Fimg,[-mi,-mj],axis=(0,1))  
 
     Fimg = Fimg * cmask #1st order inteference signal 
-    if verbose:
-        fig, ax = misc.create_fig(figsize=[5,4],nrows=1,ncols=2)
-        ax[0].imshow(np.log10(np.abs(Fimg)+1e-6))
-        ax[1].plot(cmask[:,int(np.shape(cmask)[1]/2)]) 
+    if verbose:        
+        ax[0,0].imshow(np.log10(np.abs(Fimg)+1e-6)) 
+        ax[0,0].set_axis_off()
+        ax[0,0].set_title("Fimg with mask") 
+        ax[0,1].plot(cmask[:,int(np.shape(cmask)[1]/2)]) 
+        ax[0,1].set_title("Mask") 
     Pimg = np.fft.ifft2(np.fft.ifftshift(Fimg))
     dc = np.abs(np.fft.ifft2(np.fft.ifftshift(dCF))) 
-    contrast = 2 * np.sum(np.abs(Pimg)) / np.sum(np.abs(dc)) #the contrast is defined as the amplitude ratio between interference signal to DC signal, with a factor of 2 accounting to both negative and positive frequencies. 
+    contrast = 2 * np.sum(np.abs(Pimg),dtype=np.float64) / np.sum(np.abs(dc),dtype=np.float64)  #the contrast is defined as the amplitude ratio between interference signal to DC signal, with a factor of 2 accounting to both negative and positive frequencies. 
     if verbose:
-        fig2, ax2 = misc.create_fig(figsize=[5,4],nrows=1,ncols=3) 
-        ax2[0].imshow(np.angle(Pimg[:xSizeRaw,:ySizeRaw]))
-        ax2[0].set_axis_off() 
-        ax2[1].imshow(unwrap_phase(np.angle(Pimg[:xSizeRaw,:ySizeRaw])))
-        ax2[1].set_axis_off()
-        ax2[0].set_title("raw phase")
-        ax2[1].set_title("Unwrapped phase")
-        ax2[2].imshow(np.abs(Pimg[:xSizeRaw,:ySizeRaw]),cmap="gray") 
-        ax2[2].set_axis_off() 
-        ax2[2].set_title("int")
+        print("HT2D contrast is :{}".format(contrast)) 
+        fig2, ax2 = misc.create_fig(figsize=[5,4],nrows=2,ncols=2) 
+        ax2[0,0].imshow(np.angle(Pimg[:xSizeRaw,:ySizeRaw]),clim=[-3.14,3.14])
+        ax2[0,0].set_axis_off() 
+        ax2[0,1].imshow(unwrap_phase(np.angle(Pimg[:xSizeRaw,:ySizeRaw])),clim=[-3.14,3.14])
+        ax2[0,1].set_axis_off()
+        ax2[0,0].set_title("raw phase")
+        ax2[0,1].set_title("Unwrapped phase")
+        ax2[1,1].imshow(np.abs(Pimg[:xSizeRaw,:ySizeRaw]),cmap="gray") 
+        ax2[1,1].set_axis_off() 
+        ax2[1,1].set_title("ac int")
+        ax2[1,0].imshow(np.abs(dc[:xSizeRaw,:ySizeRaw]),cmap="gray") 
+        ax2[1,0].set_title("dc int") 
         
     if returnSimple:
         return np.asarray(Pimg[:xSizeRaw,:ySizeRaw],dtype=np.complex64)
@@ -207,6 +220,8 @@ def ima2(IMGRaw,verbose=False,subtract_mean=True,zero_pad=True,returnSimple=Fals
     """
     if not IMGRaw.dtype == np.single: 
         IMGRaw = np.single(IMGRaw) 
+    if IMGRaw.ndim == 2:
+        IMGRaw = IMGRaw[np.newaxis,:,:]
     szRaw = np.shape(IMGRaw) #[Z,Y,X] 
     if subtract_mean:
         for i in range(szRaw[0]):
@@ -236,7 +251,7 @@ def ima2(IMGRaw,verbose=False,subtract_mean=True,zero_pad=True,returnSimple=Fals
 
     #tmp = IMG - np.roll(IMG,[0,2,2],axis=(0,1,2)) #subtract the image by itself  
     conttmp = np.squeeze(np.mean(IMG,axis=(1,2),dtype=np.float64)) 
-    Sref_indx = int(sz[0]/2)#np.argmax(conttmp) 
+    Sref_indx = np.argmax(conttmp) 
     Sref = np.squeeze(IMG[Sref_indx,:,:]) 
 
     if "cr" in kwargs.keys():
@@ -245,7 +260,7 @@ def ima2(IMGRaw,verbose=False,subtract_mean=True,zero_pad=True,returnSimple=Fals
             print("Warning: cr forced to be 1.0!")
             cr = 1.0
     else:
-        cr = 0.5 
+        cr = 0.4 
     #define DC window 
     if cr == 1.0:
         hh = np.arange(0,szRaw[1]+1,step=1,dtype=int) 
@@ -293,16 +308,14 @@ def ima2(IMGRaw,verbose=False,subtract_mean=True,zero_pad=True,returnSimple=Fals
     if verbose:
         print("Shape of cropped image is:{}".format(DC_cut.shape))
 
-    contrast_mat = (np.squeeze(np.mean(2*np.abs(out_cut)/np.abs(DC_cut),axis=(1,2)))) 
-
-
-    out_inten = np.squeeze(np.mean(np.abs(out_cut),axis=(1,2)))**2
+    contrast_mat = np.single(np.squeeze(2*np.sum(np.abs(out_cut),axis=(1,2),dtype=np.float64)/np.sum(np.abs(DC_cut),axis=(1,2),dtype=np.float64)))
+    out_inten = np.squeeze(np.single(np.mean(np.abs(out_cut),axis=(1,2),dtype=np.float64)))**2
     
     if verbose:
         print("Found peak position {} {}".format(mi,mj))
    
     #out = np.conjugate(out) 
-    #require further consideration: 21/11/08 
+
     if returnSimple:
         return np.asarray(out_crop,dtype=np.complex64)
     else:
@@ -666,7 +679,7 @@ def proc_unwrap_phase(pha):
 
 class QPImage(object):
     _instance = 0 
-    def __init__(self,data=None,data_key=None,ref_data=None,meta_data=None,holo_kw=None,bg_kw = None, proc_phase=True,computeBg=True, slices=-1, autoRun = True, verbose=False):
+    def __init__(self,data=None,data_key=None,ref_data=None,meta_data=None,holo_kw=None,bg_kw = None, proc_phase=True,computeBg=True, slices=0, autoRun = True, verbose=False):
         """Quantitative phase image manipulation
 
             This class implements various tasks for quantitative phase
@@ -676,17 +689,26 @@ class QPImage(object):
             Parameters
             ----------
             data: 2d ndarray (float or complex) or list
-                The experimental data (see `which_data`)
+                The experimental data (see `which_data`). If data is a file .mat or .h5 or .hdf5, it will automatically load data where the keyword is given by
+                data_key or automatically search for "IMG" or "data". 
             data_key: the key for accessing data array if "data" is defined as a file format; Default is None,
                 then it will iterates automaticaly through the data file and get the first keys of either "data" or "IMG" 
-            ref_data: reference image. could be (X,Y) or (T,X,Y) 
+            ref_data: reference image. could be (X,Y) or (T,X,Y)
             meta_data: dict
                 Meta data associated with the input data.
                 see :data:`qpimage.meta.META_KEYS`
             holo_kw: dict
                 Special keyword arguments for phase retrieval from
                 hologram data (`which_data="hologram"`).
-                default: {"batchSize":100,"cr":0.5,"trans":False,"onlyCPU":False, "verbose":verbose,"zero_pad":True,"subtract_mean":True, "returnContrastMat":True} 
+                default: {"batchSize":50,"cr":0.5,"trans":False,"onlyCPU":False, "verbose":verbose,"zero_pad":True,"subtract_mean":True, "returnContrastMat":True} 
+                    batchSize: the batch size to divide raw data into small batches in case overflowing memory. If overmemory happens, reduce the batchSize.
+                    cr: proportion of image to be counted when calculating interference contrast. 
+                    trans: transpose the raw data. usually to make it identical dimension to MATLAB
+                    onlyCPU: only using CPU. If False, it will choose GPU computation resource. 
+                    verbose: show intermediate results. better to set as False when dealing with large amount of data
+                    zero_pad:True,do zero padding 
+                    subtract_mean:True, subtract mean of rawdata before recontruction.
+                    returnContrastMat:True, get the contrast results also. 
             bg_kw: dict
                 keyword for estimatign background title. 
                 here right now, default: {"fit_offset":"mean", "fit_profile":"tilt","border_px":6}
@@ -698,7 +720,7 @@ class QPImage(object):
                 correcting for 2PI phase offsets (The offset is estimated
                 from a 1px-wide border around the image  
             slices: int, 
-                default -1, indicating it will process all the frames. Otherwise, it will only process 0:slices frames. 
+                default 0, indicating it will process all the frames. Otherwise, it will only process 0:slices frames. 
         Members and attributes:
         .data: recontructed complex data. This is actually the phase is not processed. 
         .field: recontructed complex data where the phase is unwrapped and background is corrected (if computeBg=True)
@@ -710,7 +732,7 @@ class QPImage(object):
         .save: save data into file (.mat, .hdf5 or .h5) 
         .contrast_mat: contrast map versus z axis. 
         .out_int: intensity map versus z axis. 
-        .zpos: z-axis positions for each frame. 
+        .zpos: z-axis positions for each frame, if available. 
 
         typical use:
         qpi = QPImage(file_name) 
@@ -763,7 +785,10 @@ class QPImage(object):
             #    data = data[np.newaxis,:,:]
             if autoRun:
                 if data.ndim == 3:
-                    self.out, tmpPha, self.contrast_mat, self.out_int = self._get_amp_pha(data[0:int(slices),:,:]) 
+                    if slices == 0:
+                        self.out, tmpPha, self.contrast_mat, self.out_int = self._get_amp_pha(data[:,:,:]) 
+                    else:
+                        self.out, tmpPha, self.contrast_mat, self.out_int = self._get_amp_pha(data[0:int(slices),:,:])
                 else:
                     self.out, tmpPha, self.contrast_mat, self.out_int = self._get_amp_pha(data) 
                 if proc_phase:

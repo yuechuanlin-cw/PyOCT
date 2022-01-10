@@ -267,6 +267,8 @@ def ima2(IMGRaw,subtract_mean=True,zero_pad=True,**kwargs):
     """
     if not IMGRaw.dtype == np.single:
         IMGRaw = np.single(IMGRaw) 
+    if IMGRaw.ndim == 2:
+        IMGRaw = IMGRaw[np.newaxis,:,:]
     szRaw = np.shape(IMGRaw) #[Z,Y,X] 
     if subtract_mean:
         for i in range(szRaw[0]):
@@ -295,7 +297,7 @@ def ima2(IMGRaw,subtract_mean=True,zero_pad=True,**kwargs):
 
     #tmp = IMG #- np.roll(IMG,[0,2,2],axis=(0,1,2)) #subtract the image by itself  
     conttmp = np.squeeze(np.mean(IMG,axis=(1,2),dtype=np.float64)) 
-    Sref_indx = int(sz[0]/2)#np.argmax(conttmp) 
+    Sref_indx = np.argmax(conttmp) 
     Sref = np.squeeze(IMG[Sref_indx,:,:]) 
 
     if "cr" in kwargs.keys():
@@ -351,9 +353,8 @@ def ima2(IMGRaw,subtract_mean=True,zero_pad=True,**kwargs):
     out_cut = out_crop[:,hh[0]:hh[-1],ww[0]:ww[-1]]
     DC_cut = DC_crop[:,hh[0]:hh[-1],ww[0]:ww[-1]]
 
-    contrast_mat = (np.squeeze(np.mean(2*np.abs(out_cut)/np.abs(DC_cut),axis=(1,2)))) 
-
-    out_inten = np.squeeze(np.mean(np.abs(out_cut),axis=(1,2)))**2
+    contrast_mat = np.single(np.squeeze(2*np.sum(np.abs(out_cut),axis=(1,2),dtype=np.float64)/np.sum(np.abs(DC_cut),axis=(1,2),dtype=np.float64)))
+    out_inten = np.squeeze(np.single(np.mean(np.abs(out_cut),axis=(1,2),dtype=np.float64)))**2
 
    
     return np.asarray(out_crop,dtype=np.complex64), Pref[:sz[1],:sz[2]], out_inten, mi, mj, cmask, contrast_mat
