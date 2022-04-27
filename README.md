@@ -22,6 +22,7 @@ If you want to run the latest version of the code, you can install from git:
 
     $python -m pip install -U git+git://github.com/NeversayEverLin/PyOCT.git
 
+For sample dataset of OCT, please download from: https://www.dropbox.com/sh/qsoco6detbxmtp3/AABGNsepMjcAvAr1niRBz7_Qa?dl=0
 
 After successful installaiton, you can test program under python environment:
 
@@ -115,7 +116,47 @@ Parameters:
         qpi = QPImage(file_name) 
         qpi.save(...)  
 
-        
+for a more general use, definition a function for being used:
+
+```
+def holoReconstruction(rootPath,dataName,refName='none',verbose=True):
+    if dataName.endswith(".mat"):
+        data_sName = dataName[:-4]
+    elif dataName.endswith(".h5py"):
+        data_sName = dataName[:-5]
+    else:
+        data_sName = dataName 
+
+    savePath = os.path.join(rootPath,data_sName) 
+    if not os.path.isdir(savePath):
+        os.mkdir(savePath)     
+    
+    if not refName == 'none':
+        refFile = hp.File(os.path.join(rootPath,refName),"r") 
+        refDataRaw = np.asarray(refFile["data"]["IMG"])
+        takeRef = True 
+    else:
+        takeRef = False
+    dataFile = hp.File(os.path.join(rootPath,dataName),"r") 
+    dataRaw = np.asarray(dataFile["data"]["IMG"]) 
+    if dataRaw.ndim == 4:
+        dataRaw = np.squeeze(np.mean(dataRaw,axis=0)) 
+    if "zpos" in dataFile["data"].keys():
+        zPos = np.squeeze(dataFile["data"]["zpos"][()]) #using zz or zpos
+    else:
+        zPos = np.arange(0,np.shape(dataRaw)[0],1)
+    zPos = zPos/1.33
+    if takeRef:
+        qpimage = pl.QPImage(data=dataRaw,ref_data=refDataRaw,holo_kw={"cr":0.5,"onlyCPU":False,"subtract_mean":True,"batchSize":5})
+    else:
+        qpimage = pl.QPImage(data=dataRaw,holo_kw={"cr":0.5,"onlyCPU":False,"subtract_mean":True,"batchSize":5}) 
+    
+    if verbose:
+        misc.show3DStack(qpimage.pha,cmap="rainbow",figTitle="volPhase")
+        misc.show3DStack((qpimage.amp)**2,figTitle="int") 
+    qpimage.save(savePath,fileName=data_sName+"_Recon.mat",format=".h5")  
+    return 1 
+```        
 Example dataset could be download under the request to email address: linyuechuan1989@gmail.com 
 ## License
 PyOCT is licensed under the terms of the MIT License (see the file LICENSE).# PyOCT
