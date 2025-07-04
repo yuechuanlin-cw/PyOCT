@@ -10,7 +10,7 @@ OCT imaging reconstruction follows steps as:
 5. Inverse Fourier Transform 
 6. Obtain OCT Image
 
-The algorithms was developed initially in Prof. Steven G. Adie research lab at Cornell University using MATLAB. The reconstruction speed has been improved with matrix-operation. Compared with MATLAB, Python language have a much better performance in loading data from binary files tested only in our lab computer. Currently, PyOCT only supports python 3.0+. 
+The OCT algorithms was developed initially in Prof. Steven G. Adie research lab at Cornell University using MATLAB. The DHM algorithms were developed in Prof. Peter So lat at MIT. Those codes were created and developed when I worked in Steve and Peter's lab, respectively. The reconstruction speed has been improved with matrix-operation. Compared with MATLAB, Python language have a much better performance in loading data from binary files tested only in our lab computer. Currently, PyOCT only supports python 3.0+. 
 
 This is the repository of codes that have been implemented with my own experience in coherent imaging, including optical coherence tomography (OCT) and digital holography microscopy (DHM), data process as well as miscellaneous tools that I used for my daily practice. 
 
