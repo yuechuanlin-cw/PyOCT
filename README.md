@@ -1,5 +1,7 @@
-# PyOCT: Imaging Reconstruction for Spectral-Domain Optical Coherence Tomography
-PyOCT is developed to conduct normal spectral-domain optical coherence tomography (SD-OCT) imaging reconstruction with main steps as:
+# PyOCT: Imaging processing for coherent imaging 
+PyOCT is developed to conduct spectral-domain optical coherence tomography (SD-OCT) and digital holography microscopy imaging reconstruction. 
+
+OCT imaging reconstruction follows steps as:
 1. Reading Data
 2. Background Subtraction 
 3. Spectral Resampling 
